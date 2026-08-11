@@ -1,0 +1,91 @@
+############################################
+# Start: ignore EVERYTHING by default
+############################################
+*
+
+# Allow folders so Git can traverse into them
+!*/
+
+############################################
+# Keep these tracked (minimal repo)
+############################################
+!.gitignore
+!README.md
+!requirements.txt
+!LICENSE
+# The only two Python scripts you want in the repo right now
+!FIRE_MODEL_CUDA.py
+!rothermal_ROS_kernel.py
+!run_all_strategies_batch.py
+!raws_to_sched.py
+!optimization_slope_loop.py
+!rothermal_2d_slope_optimization.py
+!slope_preprocessing.py
+!FireModel_AT_comparisons.py
+!visualization.py
+!results_postprocessing.py
+!results_postprocessing_depth.py
+!compare_reward_wins.py
+!drops_surrogate.py
+
+!dashboard.py
+!mcts.py
+!forecast_provider.py
+!wind_schedule_utils.py
+
+!model.py
+!airtankeragent.py
+!airtanker_agents
+!airtanker_agents/*.py
+!groundcrew.py
+!fireline_abm.py
+!surrogate_plotting.py
+
+!uncertainty_quantification.py
+!marshall_enhanced.tif
+!camp_fire_three_enhanced.tif
+!cali_test_big_enhanced.tif
+
+
+!/wind_schedule_esper_high.csv
+!/wind_schedule_esper_med.csv
+!/wind_schedule_marshall_med.csv
+!/wind_schedule_marshall_high.csv
+!/wind_schedule_camp_med.csv
+!/wind_schedule_camp_high.csv
+!/wind_schedule_natural.csv
+
+!combined_results_camp_fire.json
+!combined_results_esperenza.json
+!combined_results_marshall.json
+
+!dashboard_NO_PLOTTING.py
+!ics_dynamic_NO_PLOTTING.py
+!ics_dynamic_mean_NO_PLOTTING.py
+!ics_dynamic_mean_lookahead_NO_PLOTTING.py
+!ics_ros_weighted_mean_NO_PLOTTING.py
+!ics_dynamic_truth_lookahead_NO_PLOTTING.py
+!ics_ros_weighted_NO_PLOTTING.py
+!random_allocations_NO_PLOTTING.py
+!ics_truth_burned_buildings_NO_PLOTTING.py
+!ics_mean_burned_buildings_NO_PLOTTING.py
+!ics_buildings_NO_PLOTTING.py
+
+!custom_fuel_model.csv
+!burned_area_results_long.json
+
+# allow the folder
+!Visualization Files/
+# allow everything inside it
+!Visualization Files/**
+
+
+############################################
+# (Optional) still ignore common IDE/venv junk
+# (Not strictly necessary since we ignored everything,
+# but keeps intent clear if you later relax rules)
+############################################
+.idea/
+.venv/
+__pycache__/
+*.pyc
