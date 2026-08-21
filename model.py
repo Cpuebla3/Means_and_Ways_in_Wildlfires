@@ -463,15 +463,32 @@ class WildfireModel(mesa.Model):
             agent_id += 1
 
         self.plot_fig = go.Figure()
-        self.datacollector=mesa.DataCollector(model_reporters={"Elapsed Time":"elapsed_minutes", "operational_delay":"operational_delay", "groundcrew_count":"groundcrew_count", "groundcrew_speed":"groundcrew_speed", "wind_speed":"wind_speed", "wind_direction":"wind_direction", "fire_spread_sim_time":"fire_spread_sim_time", "time_step":"time_step", "Time":"time", "Agents_by_type":"agents_by_type", "Drops":"drops", "Bounds":"bounds", "Space_Width":"space_width","Space_Height":"space_height", "Buffered_bounds":"buffered_bounds"})
-
+        # self.datacollector=mesa.DataCollector(
+        #             model_reporters={"Elapsed Time":"elapsed_minutes", 
+        #                             "operational_delay":"operational_delay", 
+        #                             "groundcrew_count":"groundcrew_count", 
+        #                             "groundcrew_speed":"groundcrew_speed", 
+        #                             "wind_speed":"wind_speed", 
+        #                             "wind_direction":"wind_direction", 
+        #                             "fire_spread_sim_time":"fire_spread_sim_time", 
+        #                             "time_step":"time_step", "Time":"time", 
+        #                             "Agents_by_type":"agents_by_type", 
+        #                             "Drops":"drops", 
+        #                             "Bounds":"bounds", 
+        #                             "Space_Width":"space_width",
+        #                             "Space_Height":"space_height", 
+        #                             "Buffered_bounds":"buffered_bounds"})
+        self.datacollector=mesa.DataCollector(
+                            model_reporters={"Elapsed Time":"elapsed_minutes", 
+                                            "operational_delay":"operational_delay", 
+                                            })
+        
     def correct_position(self, position):
         epsilon = 1e-3  # Use a larger epsilon than 1e-6
         x, y = position
         x = min(max(x, self.buffered_bounds.left), self.buffered_bounds.right - epsilon)
         y = min(max(y, self.buffered_bounds.bottom), self.buffered_bounds.top - epsilon)
         return (x, y)
-
 
 
     # def _register_first_pair(self, gc):
@@ -1358,8 +1375,9 @@ class WildfireModel(mesa.Model):
                 print("✓ All sectors retarded by aircraft – simulation complete")
                 self.containment = True
 
-    def step(self):
-        # self.datacollector.collect(self) TO BE ELIMINATED
+    def step(self, data_collect_flag=False):
+        if data_collect_flag:    
+            self.datacollector.collect(self) 
         # 1) Termination check
         # ── aircraft-only termination guard ───────────────────────────
         if self.groundcrew_count == 0 and len(self.retarded_sectors) == len(self.sector_boundaries):

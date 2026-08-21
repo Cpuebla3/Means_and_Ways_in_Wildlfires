@@ -380,7 +380,7 @@ def clone_simulation(parent_model, new_wind_schedule=None):
     return child
 
 
-def simulate_in_place(model, sector_actions, duration=120):
+def simulate_in_place(model, sector_actions, duration=120, data_collect_flag=False):
     """
     Like simulate_branch but does NOT clone the model.
     It assigns the given sector_actions to the model's agents
@@ -439,7 +439,7 @@ def simulate_in_place(model, sector_actions, duration=120):
     start_time = model.time
     while model.time - start_time < duration:
         # model.step() returns False if we hit the time limit or containment
-        if not model.step():
+        if not model.step(data_collect_flag):
             break
 
 

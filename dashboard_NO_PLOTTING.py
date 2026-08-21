@@ -348,11 +348,11 @@ def simulation_loop(model: WildfireModel):
             print(f"MCTS Computation Time: {mcts_duration:.2f} s")
 
             # Apply the chosen MCTS action to the simulation.
-            simulate_in_place(model, best_child.action, duration=decision_interval)
+            simulate_in_place(model, best_child.action, duration=decision_interval, data_collect_flag=True)
             next_decision_time += decision_interval
         else:
             # No decision due yet: advance simulation one time step.
-            if not model.step():
+            if not model.step(data_collect_flag=True):
                 break
 
     print("[SIM] Simulation complete.")
@@ -382,6 +382,8 @@ def main():
         print("Baseline FIRE SCORE (truth-based):", model.baseline_fire_score)
 
     simulation_loop(model)
+    final_results_set=model.datacollector.get_model_vars_dataframe()
+    final_results_set.to_csv('Collected_Results.csv')
 
 if __name__ == "__main__":
     main()
