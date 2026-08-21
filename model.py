@@ -10,6 +10,7 @@ import datetime
 import random
 from collections import namedtuple
 import cupy as cp
+import os
 
 # from groundcrew import _record_anchor
 
@@ -479,8 +480,8 @@ class WildfireModel(mesa.Model):
         #                             "Space_Height":"space_height", 
         #                             "Buffered_bounds":"buffered_bounds"})
         self.datacollector=mesa.DataCollector(
-                            model_reporters={"Elapsed Time":"elapsed_minutes", 
-                                            "operational_delay":"operational_delay", 
+                            model_reporters={"Agents_by_type":"agents_by_type", 
+                                            "Drops":"drops" 
                                             })
         
     def correct_position(self, position):
@@ -1375,9 +1376,19 @@ class WildfireModel(mesa.Model):
                 print("✓ All sectors retarded by aircraft – simulation complete")
                 self.containment = True
 
+    def RAM_cleaning(self, n=5):
+        if self.schedule.steps%n==0:
+            df_model=self.datacollector.get_model_vars_dataframe()
+            df_model.to_csv('Partial_Data_Loading.csv', 
+                            mode='a', 
+                            header=not os.path.exists('Partial_Data_Loading.csv'))
+            self.datacollector.model_vars={keys:[] for keys in self.datacollector.model_vars.keys()}
+
     def step(self, data_collect_flag=False):
-        if data_collect_flag:    
+        if data_collect_flag:    # If data_collect_flag is True, collect data
+            print('Step #####################################', self.schedule.steps)
             self.datacollector.collect(self) 
+            self.RAM_cleaning()
         # 1) Termination check
         # ── aircraft-only termination guard ───────────────────────────
         if self.groundcrew_count == 0 and len(self.retarded_sectors) == len(self.sector_boundaries):

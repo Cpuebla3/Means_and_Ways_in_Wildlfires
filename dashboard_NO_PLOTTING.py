@@ -15,6 +15,8 @@ import networkx as nx
 import cupy as cp
 import os
 
+from pathlib import Path
+
 from forecast_provider import get_forecast
 # from wind_schedule_utils import load_wind_schedule_from_csv
 from model import WildfireModel
@@ -232,11 +234,16 @@ def end_simulation(model: WildfireModel):
 
     if model.enable_plotting:
         model.plot_fire()
-        from pathlib import Path
-        out = Path(model.case_folder) / "images"
+        out = Path(model.case_folder) / time_stamp
         out.mkdir(exist_ok=True)
-        fname = out / f"{final_image}_{time_stamp}.png"
+        fname = out / f"{final_image}.png"
         model.plot_fig.write_image(str(fname), scale=4)
+        df=pd.read_csv('Partial_Data_Loading.csv')
+        df=df.reset_index(drop=True)
+        df=df.drop(columns=['Unnamed: 0'])
+        df.to_csv(out / "Final_Collected_Results.csv")
+        if os.path.exists("Partial_Data_Loading.csv"):
+            os.remove("Partial_Data_Loading.csv")
         print(f"[SIM] Saved final frame → {fname}")
 
 # ───────────────────────────────────────────────────────────────
@@ -352,6 +359,8 @@ def simulation_loop(model: WildfireModel):
             next_decision_time += decision_interval
         else:
             # No decision due yet: advance simulation one time step.
+            # When the simulation advances one time step, we need to capture data, 
+            # hence data_collect_flag must be True
             if not model.step(data_collect_flag=True):
                 break
 
@@ -382,8 +391,6 @@ def main():
         print("Baseline FIRE SCORE (truth-based):", model.baseline_fire_score)
 
     simulation_loop(model)
-    final_results_set=model.datacollector.get_model_vars_dataframe()
-    final_results_set.to_csv('Collected_Results.csv')
-
+   
 if __name__ == "__main__":
     main()
