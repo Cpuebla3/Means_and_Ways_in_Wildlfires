@@ -23,6 +23,7 @@ import time as t
 
 import dashboard as dash
 from mcts import simulate_in_place, ordinal_map
+from wind_schedule_utils import current_wind
 
 DECISION_INTERVAL = 120      # minutes per allocation slice
 LOOKAHEAD         = DECISION_INTERVAL  # horizon we peek into
@@ -61,6 +62,7 @@ def _draw_for_assets(rng, open_set, weights, n):
         picks = np.array(picks[:n])
     return [int(s)+1 for s in picks]
 
+
 # ───────────────────────────────────────────────────────────────
 # **Truth-schedule look-ahead wind helper**
 # ───────────────────────────────────────────────────────────────
@@ -69,15 +71,7 @@ def _truth_wind_direction_lookahead(model) -> float:
     Returns the wind direction (deg) *LOOKAHEAD* minutes in the future,
     based solely on the model's truth schedule.
     """
-    t_future = model.time + LOOKAHEAD
-
-    if model.wind_schedule is None:               # static run
-        return float(model.wind_direction)
-
-    for start, end, _spd, wdir in model.wind_schedule:
-        if start <= t_future < end:
-            return float(wdir)
-    return float(model.wind_schedule[-1][3])      # beyond last bin → last dir
+    return current_wind(model, lookahead=LOOKAHEAD)[1]
 
 # ───────────────────────────────────────────────────────────────
 # Dynamic allocator (identical budgets, different wind helper)

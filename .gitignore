@@ -32,6 +32,8 @@
 !mcts.py
 !forecast_provider.py
 !wind_schedule_utils.py
+!datacollector_io.py
+!test_wind_schedule_and_datacollector.py
 
 !model.py
 !airtankeragent.py

@@ -23,9 +23,27 @@
 - Builds and traverses a search tree to select optimal agent actions.
 
 ### Wind Schedules and Uncertainty
-- Initial wind conditions are loaded from CSV schedules.
-- Each benchmark uses two wind schedules: low uncertainty and high uncertainty.
+- Initial wind conditions are loaded from CSV schedules (`start_min, end_min, speed_mean, speed_std, dir_mean, dir_std`).
+- Each benchmark uses two wind schedules: medium uncertainty and high uncertainty.
 - Supports stochastic wind forecasts via sampling.
+
+A schedule is a list of `(start, end, speed, direction)` bins. Constructor `wind_speed` / `wind_direction` are used **only** when `wind_schedule is None`. For scheduled runs those two attributes stay at dummy values (often `0` / `220`); look up the active bin with `current_wind(model)` from `wind_schedule_utils.py`.
+
+| Component | Wind it uses |
+|-----------|----------------|
+| GPU fire model (`FIRE_MODEL_CUDA`) | Multi-phase arrival times, one constant-wind solve per schedule bin. Static speed/dir if `wind_schedule is None`. |
+| Live ABM / MCTS truth | The sampled **truth** schedule. MCTS rollouts sample a *future* schedule from `forecast_provider.get_forecast` and prepend past truth bins. |
+| `ics_dynamic` | Current **truth** direction → head / flank / heel. |
+| `ics_dynamic_mean` | Latest forecast `dir_mean` at *now*. |
+| `ics_dynamic_mean_lookahead` | Forecast `dir_mean` at `time + LOOKAHEAD`. |
+| `ics_dynamic_truth_lookahead` | Truth direction at `time + LOOKAHEAD` (oracle). |
+| `ics_ros_weighted` | Live (truth) fire perimeter ROS. |
+| `ics_ros_weighted_mean` | Temporarily injects a mean-only schedule for the ROS query, then restores truth. |
+| `ics_truth_burned_buildings` / `ics_mean_burned_buildings` | Precomputed no-suppression burn under truth or mean schedule. |
+| `ics_buildings` | Static building counts; wind unused for allocation. |
+| DataCollector `wind_speed` / `wind_direction` | Callable reporters via `current_wind` (the active truth-schedule bin). |
+
+Partial collector dumps go to `Model_Partial_Data_Loading.csv`. `dashboard_NO_PLOTTING.py` deletes any leftover file at startup so adding collector columns cannot mix with an old 3-column CSV (`ParserError: Expected 3 fields … saw 5`).
 
 ---
 

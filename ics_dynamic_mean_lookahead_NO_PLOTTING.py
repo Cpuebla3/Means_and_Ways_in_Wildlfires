@@ -25,6 +25,7 @@ import time as t
 
 import dashboard as dash
 from mcts import simulate_in_place, ordinal_map
+from wind_schedule_utils import current_wind
 
 DECISION_INTERVAL = 120        # [min]  length of one allocation slice
 LOOKAHEAD         = DECISION_INTERVAL   # how far we peek into the future
@@ -65,6 +66,7 @@ def _draw_for_assets(rng, open_set, weights, n):
         picks = np.array(picks[:n])
     return [int(s)+1 for s in picks]
 
+
 # ───────────────────────────────────────────────────────────────
 # LOOK-AHEAD wind helper
 # ───────────────────────────────────────────────────────────────
@@ -74,20 +76,7 @@ def _future_wind_direction(model) -> float:
 
     Fallback order identical to the mean script if forecast is missing.
     """
-    df   = getattr(model, "latest_forecast_df", None)
-    t_now = model.time + LOOKAHEAD
-    if df is not None and not df.empty:
-        row = df[(df["start_min"] <= t_now) & (t_now < df["end_min"])]
-        if not row.empty:                 # found a future bin
-            return float(row.iloc[0]["dir_mean"])
-        return float(df.iloc[-1]["dir_mean"])  # beyond last bin → use last
-    # ---- fallbacks on truth / static ----
-    if model.wind_schedule is None:
-        return float(model.wind_direction)
-    for s, e, _spd, wdir in model.wind_schedule:
-        if s <= t_now < e:
-            return float(wdir)
-    return float(model.wind_schedule[-1][3])
+    return current_wind(model, lookahead=LOOKAHEAD, prefer_forecast=True)[1]
 
 # ───────────────────────────────────────────────────────────────
 # Dynamic allocator (same math, but uses _future_wind_direction)

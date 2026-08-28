@@ -11,6 +11,7 @@ import datetime
 # Import the original “dashboard” module for its WildfireModel and forecast functions.
 import dashboard as dash
 from mcts import simulate_in_place, ordinal_map
+from wind_schedule_utils import current_wind
 
 # Decision interval (minutes) used in the simulation loop.
 DECISION_INTERVAL = 120
@@ -90,13 +91,7 @@ def _latest_wind_direction(model) -> float:
     Return the current wind direction (in degrees) from the model.
     If a dynamic wind schedule is active, returns the direction of the active segment.
     """
-    if model.wind_schedule is None:  # static wind
-        return float(model.wind_direction)
-    now = model.time
-    for start, end, _spd, wdir in model.wind_schedule:
-        if start <= now < end:
-            return float(wdir)
-    return float(model.wind_schedule[-1][3])
+    return current_wind(model)[1]
 
 
 def _angle_to_sector(angle_deg: float, sector_ranges: list[tuple[float, float]]) -> int:

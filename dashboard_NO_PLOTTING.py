@@ -21,6 +21,7 @@ from forecast_provider import get_forecast
 # from wind_schedule_utils import load_wind_schedule_from_csv
 from model import WildfireModel
 from mcts import clone_simulation, mcts, simulate_in_place, hierarchy_pos_tree, count_expandable_assets
+from datacollector_io import reset_partial_data_files, save_final_collected_results
 
 # ───────────────────────────────────────────────────────────────
 # Debug/Helper Functions
@@ -226,24 +227,22 @@ def end_simulation(model: WildfireModel):
         f"final buildings-breakdown = {json.dumps(bldg_map, separators=(',', ':'))}"
     )
 
-
-
-
-    # score = model.fire.calculate_fire_score(model.time)
-    # print(f"[SIM] Finished at t={model.time:.0f} min – final fire-score = {score:.2f}")
+    # Always flush leftover collector rows (RAM_cleaning only writes every 5 steps)
+    # and assemble Final_Collected_Results.csv.  This used to be
+    # pd.read_csv('Partial_Data_Loading.csv') inside the plotting branch, which
+    # crashed with ParserError after wind_speed/wind_direction were added to
+    # the collector while a leftover 3-column CSV was still on disk.
+    out = Path(model.case_folder) / time_stamp
+    out.mkdir(parents=True, exist_ok=True)
+    model.flush_datacollector()
+    saved = save_final_collected_results(out / "Final_Collected_Results.csv")
+    if saved is not None:
+        print(f"[SIM] Saved collector CSV → {saved}")
 
     if model.enable_plotting:
         model.plot_fire()
-        out = Path(model.case_folder) / time_stamp
-        out.mkdir(exist_ok=True)
         fname = out / f"{final_image}.png"
         model.plot_fig.write_image(str(fname), scale=4)
-        df=pd.read_csv('Partial_Data_Loading.csv')
-        df=df.reset_index(drop=True)
-        df=df.drop(columns=['Unnamed: 0'])
-        df.to_csv(out / "Final_Collected_Results.csv")
-        if os.path.exists("Partial_Data_Loading.csv"):
-            os.remove("Partial_Data_Loading.csv")
         print(f"[SIM] Saved final frame → {fname}")
 
 # ───────────────────────────────────────────────────────────────
@@ -370,6 +369,10 @@ def simulation_loop(model: WildfireModel):
 # Main entry point
 # ───────────────────────────────────────────────────────────────
 def main():
+    # Drop leftover collector CSVs *before* any clones are built, so MCTS
+    # baseline clones cannot wipe a file the live run is appending to, and so
+    # a previous 3-column file cannot mix with the 5-column wind reporters.
+    reset_partial_data_files()
     # Build the model using the preset parameters.
     model = build_model()
     print("Starting simulation with the following parameters:")

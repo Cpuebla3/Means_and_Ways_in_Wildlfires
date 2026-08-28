@@ -25,6 +25,7 @@ import time as t
 
 import dashboard as dash
 from mcts import simulate_in_place, ordinal_map
+from wind_schedule_utils import current_wind
 
 DECISION_INTERVAL = 120        # minutes between allocation rounds
 
@@ -69,6 +70,7 @@ def _draw_for_assets(rng, open_set, weights, n):
         picks = np.array(picks[:n])
     return [int(s) + 1 for s in picks]
 
+
 # ───────────────────────────────────────────────────────────────
 # Forecast-aware wind helper
 # ───────────────────────────────────────────────────────────────
@@ -80,21 +82,7 @@ def _latest_wind_direction(model) -> float:
       3. direction of the *truth* schedule segment currently active
       4. static model.wind_direction
     """
-    df = getattr(model, "latest_forecast_df", None)
-    if df is not None and not df.empty:
-        now = model.time
-        row = df[(df["start_min"] <= now) & (now < df["end_min"])]
-        if not row.empty:
-            return float(row.iloc[0]["dir_mean"])
-        return float(df.iloc[-1]["dir_mean"])
-
-    # --- fallbacks ----------------------------------------------------
-    if model.wind_schedule is None:
-        return float(model.wind_direction)
-    for s, e, _spd, wdir in model.wind_schedule:
-        if s <= model.time < e:
-            return float(wdir)
-    return float(model.wind_schedule[-1][3])
+    return current_wind(model, prefer_forecast=True)[1]
 
 # ───────────────────────────────────────────────────────────────
 # Angle→sector helpers & allocator

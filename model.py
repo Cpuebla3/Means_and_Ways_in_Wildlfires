@@ -10,7 +10,10 @@ import datetime
 import random
 from collections import namedtuple
 import cupy as cp
-import os
+import json
+
+from wind_schedule_utils import current_wind
+from datacollector_io import append_datacollector_frame
 
 # from groundcrew import _record_anchor
 
@@ -89,6 +92,34 @@ def _gc_make_finish_cell(model,
                                  far_boundary_idx,
                                  buffer_minutes=final_buf)
 
+
+def _report_agents_by_type(model):
+    """JSON map of agent class name → count (CSV-safe, no embedded commas)."""
+    abt = getattr(model, "agents_by_type", {}) or {}
+    out = {}
+    items = abt.items() if hasattr(abt, "items") else []
+    for key, val in items:
+        name = getattr(key, "__name__", str(key))
+        try:
+            out[name] = len(val)
+        except TypeError:
+            out[name] = val
+    return json.dumps(out, sort_keys=True)
+
+
+def _report_drops(model):
+    """JSON-serialize drop records so commas inside lists cannot split CSV fields."""
+    return json.dumps(getattr(model, "drops", []) or [], default=str)
+
+
+def _report_wind_speed(model):
+    """Speed from the active wind_schedule bin, not the constructor dummy."""
+    return current_wind(model)[0]
+
+
+def _report_wind_direction(model):
+    """Direction from the active wind_schedule bin, not the constructor dummy."""
+    return current_wind(model)[1]
 
 
 class WildfireModel(mesa.Model):
@@ -479,10 +510,19 @@ class WildfireModel(mesa.Model):
         #                             "Space_Width":"space_width",
         #                             "Space_Height":"space_height", 
         #                             "Buffered_bounds":"buffered_bounds"})
-        self.datacollector=mesa.DataCollector(
-                            model_reporters={"Agents_by_type":"agents_by_type", 
-                                            "Drops":"drops" 
-                                            })
+        # Callable reporters: wind_* read the *current schedule bin* (constructor
+        # wind_speed/wind_direction stay dummy when a schedule is in use).
+        # Agents_by_type / Drops are JSON strings so RAM_cleaning CSVs stay
+        # rectangular after those two wind columns are added.
+        self.datacollector = mesa.DataCollector(
+            model_reporters={
+                "Time": "time",
+                "Agents_by_type": _report_agents_by_type,
+                "Drops": _report_drops,
+                "wind_speed": _report_wind_speed,
+                "wind_direction": _report_wind_direction,
+            }
+        )
         
     def correct_position(self, position):
         epsilon = 1e-3  # Use a larger epsilon than 1e-6
@@ -1376,13 +1416,29 @@ class WildfireModel(mesa.Model):
                 print("✓ All sectors retarded by aircraft – simulation complete")
                 self.containment = True
 
-    def RAM_cleaning(self, n=5):
-        if self.schedule.steps%n==0:
-            df_model=self.datacollector.get_model_vars_dataframe()
-            df_model.to_csv('Partial_Data_Loading.csv', 
-                            mode='a', 
-                            header=not os.path.exists('Partial_Data_Loading.csv'))
-            self.datacollector.model_vars={keys:[] for keys in self.datacollector.model_vars.keys()}
+    def RAM_cleaning(self, n=5, force=False):
+        """
+        Spill collector rows to disk every *n* steps so Mesa does not hold the
+        full time series in RAM.
+
+        Always go through ``append_datacollector_frame``: a leftover CSV from a
+        previous reporter set (3 columns vs 5 after adding wind) must not be
+        appended to, which is what caused
+        ``ParserError: Expected 3 fields ... saw 5``.
+        """
+        if not force and self.schedule.steps % n != 0:
+            return
+        df_model = self.datacollector.get_model_vars_dataframe()
+        if df_model is None or df_model.empty:
+            return
+        append_datacollector_frame(df_model)
+        self.datacollector.model_vars = {
+            keys: [] for keys in self.datacollector.model_vars.keys()
+        }
+
+    def flush_datacollector(self):
+        """Write leftover in-memory collector rows (last steps % n != 0)."""
+        self.RAM_cleaning(n=1, force=True)
 
     def step(self, data_collect_flag=False):
         if data_collect_flag:    # If data_collect_flag is True, collect data
