@@ -1,8 +1,8 @@
 import math
 import numpy as np
 import mesa
-import firelinepath
 from collections import namedtuple
+from fireline_rasters import align_fireline_rasters, call_fireline_between_two_points
 
 # Define a Point tuple for clarity.
 Point = namedtuple("Point", ["x", "y"])
@@ -234,15 +234,14 @@ def _rough_line_minutes(model,
     raw_mtt   = fire.arrival_time_grid
     mtt       = np.where(np.isnan(raw_mtt), np.nan,
                          np.clip(raw_mtt - model.time, 0, None))
-    fuel      = fire.fuel_model.astype(int)
-    feasibility = np.ones_like(fuel, dtype=bool)
+    fuel = np.where(fire.fuel_model.astype(int) < 0, 102, fire.fuel_model.astype(int))
+    # Build feasibility from MTT shape (not fuel) so a Fortran-order fuel
+    # raster cannot present 996 vs 888 to the Rust pathfinder.
+    mtt, fuel, feasibility = align_fireline_rasters(mtt, fuel)
 
     value_map = BASE_CLEAR_RATE          # hours / cell
 
-    fuel = fire.fuel_model.astype(int)
-    fuel = np.where(fuel < 0, 102, fuel)  # or whatever valid ID you’ve defined
-
-    res = firelinepath.fireline_between_two_points(
+    res = call_fireline_between_two_points(
         start=np.array(start_rc, int),
         mtt=mtt,
         fuel=fuel,
@@ -1661,7 +1660,7 @@ class GroundCrewAgent(mesa.Agent):
 
             # If start/finish are missing, skip the full-path overlay quietly.
             if self.start_rc is not None and self.planned_finish is not None:
-                result = firelinepath.fireline_between_two_points(
+                result = call_fireline_between_two_points(
                     start=np.array(self.start_rc, int),
                     mtt=mtt,
                     fuel=fuel2,
@@ -2045,7 +2044,9 @@ class GroundCrewAgent(mesa.Agent):
 
 
         # --- dynamic feasibility mask (same logic as before) ----------
-        R, C = fuel.shape
+        # Align to MTT first so R,C match the arrival grid (888×996 on Esperanza).
+        mtt, fuel, _ = align_fireline_rasters(mtt, fuel)
+        R, C = mtt.shape
         feasibility = np.ones((R, C), dtype=bool)
 
         sectors = M.sector_angle_ranges  # list[(lo, hi)]
@@ -2083,7 +2084,7 @@ class GroundCrewAgent(mesa.Agent):
         # --- run Rust pathfinder --------------------------------------
         self._print_start_origin()
 
-        result = firelinepath.fireline_between_two_points(
+        result = call_fireline_between_two_points(
             start=np.array(self.start_rc, int),
             mtt=mtt,
             fuel=fuel,
