@@ -235,8 +235,8 @@ def _rough_line_minutes(model,
     mtt       = np.where(np.isnan(raw_mtt), np.nan,
                          np.clip(raw_mtt - model.time, 0, None))
     fuel = np.where(fire.fuel_model.astype(int) < 0, 102, fire.fuel_model.astype(int))
-    # Build feasibility from MTT shape (not fuel) so a Fortran-order fuel
-    # raster cannot present 996 vs 888 to the Rust pathfinder.
+    # Pad to square inside call_fireline_between_two_points: Esperanza is
+    # 888×996 and firelinepath compares height vs width (left 888, right 996).
     mtt, fuel, feasibility = align_fireline_rasters(mtt, fuel)
 
     value_map = BASE_CLEAR_RATE          # hours / cell
@@ -2044,9 +2044,9 @@ class GroundCrewAgent(mesa.Agent):
 
 
         # --- dynamic feasibility mask (same logic as before) ----------
-        # Align to MTT first so R,C match the arrival grid (888×996 on Esperanza).
-        mtt, fuel, _ = align_fireline_rasters(mtt, fuel)
-        R, C = mtt.shape
+        # Use the unpadded arrival-grid size for sector geometry. Padding to
+        # square happens in call_fireline_between_two_points.
+        R, C = np.asarray(mtt).shape
         feasibility = np.ones((R, C), dtype=bool)
 
         sectors = M.sector_angle_ranges  # list[(lo, hi)]

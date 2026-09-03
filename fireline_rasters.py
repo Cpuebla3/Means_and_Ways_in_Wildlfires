@@ -1,47 +1,67 @@
 """
-Align MTT / fuel / feasibility rasters before calling firelinepath.
+Prepare MTT / fuel / feasibility rasters for firelinepath.
 
-The Esperanza landscape (cali_test_big_enhanced.tif) is 888 rows × 996 cols.
-firelinepath's Rust binding compares the first axis of MTT vs feasibility; a
-Fortran-order or width-major copy is seen as 996 vs 888 and panics:
+Esperanza (cali_test_big_enhanced.tif) is 888 rows × 996 cols. firelinepath
+0.3 asserts at src/lib.rs:517:
 
     MTT matrix is not of same size as Feasibility matrix
-    left: 888  right: 996
+    left: 888
+    right: 996
+
+That is the grid *height* vs *width*, not a leftover C-vs-F copy. Making both
+arrays C-contiguous (888, 996) does not change those two numbers. The binding
+compares one matrix's row count to the other's column count — a check that
+only passes on square landscapes.
+
+Workaround: pad every raster to n×n with n = max(rows, cols). Start/finish
+cells stay in the original extent; padded cells are +inf / infeasible.
 """
 from __future__ import annotations
 
 import numpy as np
 
 
+def _match_mtt_shape(mtt: np.ndarray, other: np.ndarray, name: str) -> np.ndarray:
+    other = np.asarray(other)
+    if other.shape == mtt.shape:
+        return other
+    if other.T.shape == mtt.shape:
+        return other.T
+    raise ValueError(f"{name} shape {other.shape} does not match MTT {mtt.shape}")
+
+
+def _pad_square(arr: np.ndarray, fill):
+    rows, cols = arr.shape[:2]
+    n = max(rows, cols)
+    if rows == n and cols == n:
+        return arr
+    out = np.full((n, n), fill, dtype=arr.dtype)
+    out[:rows, :cols] = arr
+    return out
+
+
 def align_fireline_rasters(mtt, fuel, feasibility=None):
     """
-    Return C-contiguous (row, col) copies of MTT, fuel, and feasibility
-    that all share MTT's shape.
+    Return C-contiguous square copies of MTT, fuel, and feasibility.
+
+    On Esperanza the result is (996, 996). Original data occupy [:888, :996].
     """
-    mtt = np.asarray(mtt)
-    fuel = np.asarray(fuel)
-    if mtt.ndim != 2 or fuel.ndim != 2:
-        raise ValueError(
-            f"MTT and fuel must be 2-D (got MTT {mtt.shape}, fuel {fuel.shape})"
-        )
-    if fuel.shape != mtt.shape:
-        if fuel.T.shape == mtt.shape:
-            fuel = fuel.T
-        else:
-            raise ValueError(
-                f"fuel shape {fuel.shape} does not match MTT {mtt.shape}"
-            )
+    mtt = np.asarray(mtt, dtype=np.float64)
+    if mtt.ndim != 2:
+        raise ValueError(f"MTT must be 2-D, got shape {mtt.shape}")
+    fuel = np.asarray(_match_mtt_shape(mtt, fuel, "fuel"), dtype=np.int32)
     if feasibility is None:
         feasibility = np.ones(mtt.shape, dtype=bool)
     else:
-        feasibility = np.asarray(feasibility)
-        if feasibility.shape != mtt.shape:
-            if feasibility.T.shape == mtt.shape:
-                feasibility = feasibility.T
-            else:
-                raise ValueError(
-                    f"feasibility shape {feasibility.shape} does not match MTT {mtt.shape}"
-                )
+        feasibility = np.asarray(
+            _match_mtt_shape(mtt, np.asarray(feasibility), "feasibility"),
+            dtype=bool,
+        )
+
+    mtt = _pad_square(mtt, np.inf)
+    fuel = _pad_square(fuel, np.int32(99))
+    feasibility = _pad_square(feasibility, False)
+
     return (
         np.ascontiguousarray(mtt, dtype=np.float64),
         np.ascontiguousarray(fuel, dtype=np.int32),
@@ -61,7 +81,7 @@ def call_fireline_between_two_points(
     distance_penalty=0.001,
     firefighter_fire_buffer_time=120,
 ):
-    """Call firelinepath after forcing matching C-contiguous raster shapes."""
+    """Call firelinepath after padding rasters to a square C-contiguous layout."""
     import firelinepath
 
     mtt, fuel, feasibility = align_fireline_rasters(mtt, fuel, feasibility)
