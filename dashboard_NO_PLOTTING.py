@@ -102,6 +102,7 @@ mcts_iterations     = int(input_parameters['mcts_iterations'])
 mcts_max_depth      = int(input_parameters['mcts_max_depth']) 
 exploration_constant= 1 / math.sqrt(2)
 building_weight     = int(input_parameters['building_weight']) 
+rollout = int(input_parameters['rollout_depth'])
 
 auto_iterations       = True     # turn on to mirror dashboard's auto-iterations
 iters_for_1_asset     = int(input_parameters['iters_for_1_asset']) 
@@ -153,7 +154,13 @@ if wind_schedule_flag:
 	set_background_schedule(_BACKGROUND_SCHED)
 	set_truth_schedule(truth_schedule)
 else:
-        truth_schedule = None
+    truth_schedule = None   
+
+# Dictionary to capture simulation parameters
+constant_data_dict={'elapsed_minutes':elapsed_minutes, 
+                    'fire_sim_time':fire_sim_time, 
+                    'overall_time_limit':overall_time_limit, 
+                    'decision_interval':decision_interval} 
 
 # ───────────────────────────────────────────────────────────────
 # Model construction
@@ -208,8 +215,6 @@ def end_simulation(model: WildfireModel):
         if isinstance(ag, GroundCrewAgent):
             ag.flush_clear_buffer()
 
-
-
     import json
     # final metrics
     area_tot = model.fire.calculate_fire_score(model.time)
@@ -238,12 +243,26 @@ def end_simulation(model: WildfireModel):
         out.mkdir(exist_ok=True)
         fname = out / f"{final_image}.png"
         model.plot_fig.write_image(str(fname), scale=4)
-        df=pd.read_csv('Partial_Data_Loading.csv')
+        model.RAM_cleaning(n=1) #This is to ensure that the final set of data is captured within the CSV file.  
+                                # If this command is not added, final five data points (in model.py we set data capture
+                                # rate at n=5) are not captured
+        # Model Data to CSV
+        df=pd.read_csv('Model_Partial_Data_Loading.csv')
         df=df.reset_index(drop=True)
         df=df.drop(columns=['Unnamed: 0'])
-        df.to_csv(out / "Final_Collected_Results.csv")
-        if os.path.exists("Partial_Data_Loading.csv"):
-            os.remove("Partial_Data_Loading.csv")
+        df.to_csv(out / "Model_Final_Collected_Results.csv")
+        if os.path.exists("Model_Partial_Data_Loading.csv"):
+            os.remove("Model_Partial_Data_Loading.csv")
+        # Simulation Parameters CSV Loading    
+        df_constant_data =pd.DataFrame.from_dict(constant_data_dict, orient='index')  
+        df_constant_data.to_csv(out / "Simulation_Parameters.csv", sep='=', header=False)  
+        # Agent Data to CSV
+        df=pd.read_csv('Agent_Partial_Data_Loading.csv')
+        #df=df.reset_index(drop=True)
+        #df=df.drop(columns=['Unnamed: 0'])
+        df.to_csv(out / "Agent_Final_Collected_Results.csv")
+        if os.path.exists("Agent_Partial_Data_Loading.csv"):
+            os.remove("Agent_Partial_Data_Loading.csv")    
         print(f"[SIM] Saved final frame → {fname}")
 
 # ───────────────────────────────────────────────────────────────
@@ -267,7 +286,7 @@ def simulation_loop(model: WildfireModel):
     else:
         forecast_df = None
 
-    while model.time < overall_limit:
+    while model.time < overall_limit: # The complete simulation time occurs within this 'while'
         # If there is less than one full decision slice left, terminate.
         if model.time >= overall_limit - decision_interval:
             print("[SIM] Less than one full decision slice left – terminating simulation.")
@@ -287,7 +306,7 @@ def simulation_loop(model: WildfireModel):
             # derive sector count from the model
             num_sectors = getattr(model, "num_sectors", len(getattr(model, "sector_angle_ranges", [])) or 4)
             open_sectors = [s for s in range(num_sectors) if not model.is_sector_contained(s)]
-            if not open_sectors:
+            if not open_sectors: #This indicates that the fire is contained because there are no open sectors
                 print("[SIM] All sectors contained – ending simulation.")
                 end_simulation(model)
                 break
@@ -296,8 +315,8 @@ def simulation_loop(model: WildfireModel):
             if schedule_enabled:
                 clone.latest_forecast_df = forecast_df
 
-            cp.cuda.Stream.null.synchronize()
-            t0 = t.time()
+            cp.cuda.Stream.null.synchronize() # This stops the CPU until the GPU finishes the process
+            t0 = t.time() # This is used to determine the time the MCTS process takes
             # Run MCTS without a UI update callback
             # root, _ = mcts(
             #     clone,
@@ -320,8 +339,8 @@ def simulation_loop(model: WildfireModel):
                 mcts_iterations_effective = mapping.get(n_assets, mcts_iterations)
             else:
                 mcts_iterations_effective = mcts_iterations
-            # ROLLOUT_DEPTH_ADJUSTMENT = int(os.environ["ROLLOUT_DEPTH_ADJUSTMENT"])
-            ROLLOUT_DEPTH_ADJUSTMENT = 6
+            
+            ROLLOUT_DEPTH_ADJUSTMENT = rollout
             root, _ = mcts(
                 clone,
                 iterations=mcts_iterations_effective,

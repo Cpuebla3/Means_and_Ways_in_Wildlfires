@@ -14,6 +14,7 @@
 !requirements.txt
 !LICENSE
 # The only two Python scripts you want in the repo right now
+!Global_parameters.txt
 !FIRE_MODEL_CUDA.py
 !rothermal_ROS_kernel.py
 !run_all_strategies_batch.py

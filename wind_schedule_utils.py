@@ -5,7 +5,7 @@ Convert wind_schedule.csv into the list of
 """
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 # def load_wind_schedule_from_csv(path="wind_schedule.csv", seed=None):
 #     """
@@ -160,3 +160,83 @@ def _print_schedule(
     df = pd.DataFrame(schedule, columns=["start", "end", "speed", "dir"])
     print(f"\n{title}")
     print(df.to_string(index=False, float_format=lambda x: f"{x:8.3f}"))
+
+
+def wind_at_time(
+    schedule,
+    t: float,
+    *,
+    fallback_speed: float = 0.0,
+    fallback_direction: float = 0.0,
+) -> Tuple[float, float]:
+    """
+    Return ``(speed, direction_deg)`` active at minute *t*.
+
+    Bins are ``[start, end)``.  Times before the first bin use that bin;
+    times at/after the last bin's ``end`` use the last bin.  A missing /
+    empty schedule falls back to the static constructor values.
+    """
+    if not schedule:
+        return float(fallback_speed), float(fallback_direction) % 360.0
+
+    t = float(t)
+    first = schedule[0]
+    if t < first[0]:
+        return float(first[2]), float(first[3]) % 360.0
+
+    for start, end, spd, wdir in schedule:
+        if start <= t < end:
+            return float(spd), float(wdir) % 360.0
+
+    last = schedule[-1]
+    return float(last[2]), float(last[3]) % 360.0
+
+
+def _forecast_wind_at_time(forecast_df, t: float) -> Optional[Tuple[float, float]]:
+    """Return ``(speed_mean, dir_mean)`` covering *t*, or ``None`` if no table."""
+    if forecast_df is None:
+        return None
+    try:
+        if forecast_df.empty:
+            return None
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    t = float(t)
+    mask = (forecast_df["start_min"] <= t) & (t < forecast_df["end_min"])
+    row = forecast_df.loc[mask].iloc[0] if mask.any() else forecast_df.iloc[-1]
+    return float(row["speed_mean"]), float(row["dir_mean"]) % 360.0
+
+
+def current_wind(
+    model,
+    *,
+    t: Optional[float] = None,
+    lookahead: float = 0.0,
+    prefer_forecast: bool = False,
+) -> Tuple[float, float]:
+    """
+    Speed/direction a planner should use at ``t + lookahead`` (minutes).
+
+    Parameters
+    ----------
+    prefer_forecast
+        If True and ``model.latest_forecast_df`` is set, use that table's
+        μ values (ICS-mean / ICS-mean-lookahead).  Otherwise use the model's
+        truth ``wind_schedule``, then static ``wind_speed`` / ``wind_direction``.
+    """
+    query_t = (model.time if t is None else t) + lookahead
+
+    if prefer_forecast:
+        fc = _forecast_wind_at_time(
+            getattr(model, "latest_forecast_df", None), query_t
+        )
+        if fc is not None:
+            return fc
+
+    return wind_at_time(
+        getattr(model, "wind_schedule", None),
+        query_t,
+        fallback_speed=getattr(model, "wind_speed", 0.0),
+        fallback_direction=getattr(model, "wind_direction", 0.0),
+    )    

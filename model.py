@@ -11,6 +11,7 @@ import random
 from collections import namedtuple
 import cupy as cp
 import os
+from wind_schedule_utils import wind_at_time, current_wind
 
 # from groundcrew import _record_anchor
 
@@ -141,7 +142,6 @@ class WildfireModel(mesa.Model):
         self.wind_schedule = wind_schedule
         self.baseline_fire_score = None  # declare it here for clarity
         self.num_sectors = int(num_sectors)
-
 
         self.second_groundcrew_sector_mapping = second_groundcrew_sector_mapping
         self.base_positions = base_positions
@@ -480,9 +480,12 @@ class WildfireModel(mesa.Model):
         #                             "Space_Height":"space_height", 
         #                             "Buffered_bounds":"buffered_bounds"})
         self.datacollector=mesa.DataCollector(
-                            model_reporters={"Agents_by_type":"agents_by_type", 
-                                            "Drops":"drops" 
-                                            })
+                            model_reporters={"current wind":[current_wind, [self]],
+                                             "Time":"time", 
+                                            }, 
+                                            agent_reporters={"state":"state", 
+                                                             "position":"position", 
+                                                             "fire_area_target":"fire_area_target"})
         
     def correct_position(self, position):
         epsilon = 1e-3  # Use a larger epsilon than 1e-6
@@ -1379,14 +1382,29 @@ class WildfireModel(mesa.Model):
     def RAM_cleaning(self, n=5):
         if self.schedule.steps%n==0:
             df_model=self.datacollector.get_model_vars_dataframe()
-            df_model.to_csv('Partial_Data_Loading.csv', 
+            df_agent=self.datacollector.get_agent_vars_dataframe()
+            # Model Data Capturing
+            df_model.to_csv('Model_Partial_Data_Loading.csv', 
                             mode='a', 
-                            header=not os.path.exists('Partial_Data_Loading.csv'))
+                            header=not os.path.exists('Model_Partial_Data_Loading.csv'))
             self.datacollector.model_vars={keys:[] for keys in self.datacollector.model_vars.keys()}
+            # Agent Data Capturing
+            df_agent.to_csv('Agent_Partial_Data_Loading.csv', 
+                            mode='a', 
+                            header=not os.path.exists('Agent_Partial_Data_Loading.csv'))
+            self.datacollector._agent_records={}
+            #self.datacollector._agenttype_records={}
+
+    def get_wind_parameters(self): # This function gets the wind parameters from the wind.schedule tuple
+        for t0,t1,w_s,w_d in self.wind_schedule:
+            if (t0 <= self.time) and (self.time < t1): # This command returns 'w_s' and 'w_d' when self.time is between t0 and t1
+                return w_s, w_d    
+
 
     def step(self, data_collect_flag=False):
         if data_collect_flag:    # If data_collect_flag is True, collect data
             print('Step #####################################', self.schedule.steps)
+           # print('Wind_schedule ######################', self.wind_schedule)
             self.datacollector.collect(self) 
             self.RAM_cleaning()
         # 1) Termination check

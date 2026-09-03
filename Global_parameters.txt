@@ -1,0 +1,38 @@
+# This file feeds input parameters for the runs
+
+scenario=0
+final_image=1_AirTanker
+
+# MCTS and simulation configuration
+decision_interval   = 120  
+mcts_iterations     = 50
+mcts_max_depth      = 3
+building_weight     = 2
+rollout_depth       = 6
+
+iters_for_1_asset     = 5
+iters_for_2_assets    = 10
+iters_for_3_assets    = 300
+
+
+# Simulation and fire parameters
+elapsed_minutes     = 240
+fire_sim_time       = 500
+overall_time_limit  = 500
+groundcrew_count    = 1
+
+# Airtanker counts (using one type for brevity)
+c130j_count         = 0
+fireherc_count      = 0
+scooper_count       = 0
+at802f_count        = 0
+dash8_count         = 0
+
+time_step           = 1
+operational_delay   = 0
+groundcrew_speed    = 30
+
+# Wind condition
+wind_schedule       = True
+wind_speed          = 20
+wind_dir            = 220
