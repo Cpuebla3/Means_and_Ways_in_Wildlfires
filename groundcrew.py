@@ -2,7 +2,7 @@ import math
 import numpy as np
 import mesa
 from collections import namedtuple
-from fireline_rasters import align_fireline_rasters, call_fireline_between_two_points
+from fireline_rasters import call_fireline_between_two_points
 
 # Define a Point tuple for clarity.
 Point = namedtuple("Point", ["x", "y"])
@@ -235,18 +235,16 @@ def _rough_line_minutes(model,
     mtt       = np.where(np.isnan(raw_mtt), np.nan,
                          np.clip(raw_mtt - model.time, 0, None))
     fuel = np.where(fire.fuel_model.astype(int) < 0, 102, fire.fuel_model.astype(int))
-    # Pad to square inside call_fireline_between_two_points: Esperanza is
-    # 888×996 and firelinepath compares height vs width (left 888, right 996).
-    mtt, fuel, feasibility = align_fireline_rasters(mtt, fuel)
 
     value_map = BASE_CLEAR_RATE          # hours / cell
 
+    # No mask here (every cell is feasible), so leave feasibility unset: that
+    # skips firelinepath's broken rows-vs-columns feasibility assert.
     res = call_fireline_between_two_points(
         start=np.array(start_rc, int),
         mtt=mtt,
         fuel=fuel,
         fuel_clear_cost=value_map,
-        feasibility=feasibility,
         finish=np.array(finish_rc, int),
         clear_burning_penalty=1000000.0,
         distance_penalty=0.001,
@@ -2044,8 +2042,8 @@ class GroundCrewAgent(mesa.Agent):
 
 
         # --- dynamic feasibility mask (same logic as before) ----------
-        # Use the unpadded arrival-grid size for sector geometry. Padding to
-        # square happens in call_fireline_between_two_points.
+        # Sector geometry uses the true arrival-grid size; any padding needed
+        # by firelinepath happens in call_fireline_between_two_points.
         R, C = np.asarray(mtt).shape
         feasibility = np.ones((R, C), dtype=bool)
 
